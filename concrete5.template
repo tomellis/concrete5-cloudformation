@@ -1,0 +1,141 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "Template to deploy Concrete5 CMS v1",
+
+
+    "Parameters" : {
+
+      "InstanceType" : {
+        "Description" : "EC2 instance type",
+        "Type" : "String",
+        "Default" : "t2.small",
+        "AllowedValues" : [ "t2.micro", "t2.small", "t2.large", "m3.medium", "m3.large", "m3.xlarge", "m3.2xlarge", "c1.medium", "c1.xlarge", "c3.large", "c3.xlarge", "c3.2xlarge"],
+        "ConstraintDescription" : "must be a valid EC2 instance type."
+      },
+
+      "KeyName" : {
+        "Description" : "The EC2 Key Pair to allow SSH access to the instances",
+        "Type" : "AWS::EC2::KeyPair::KeyName",
+        "ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+      },
+
+      "OperatorEMail": {
+        "Description": "EMail address to notify if there are any autoscale notifications",
+        "Type": "String",
+        "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
+        "ConstraintDescription": "must be a valid email address."
+      }
+
+    },
+
+
+    "Resources" : {
+
+      "Concrete5NotificationTopic": {
+        "Type": "AWS::SNS::Topic",
+        "Properties": {
+          "Subscription": [ { "Endpoint": { "Ref": "OperatorEMail" }, "Protocol": "email" } ]
+        }
+      },
+
+      "WebServerGroup" : {
+        "Type" : "AWS::AutoScaling::AutoScalingGroup",
+        "Properties" : {
+          "AvailabilityZones" : { "Fn::GetAZs" : ""},
+          "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+          "MinSize" : "1",
+          "MaxSize" : "2",
+          "LoadBalancerNames" : [ { "Ref" : "ElasticLoadBalancer" } ],
+          "NotificationConfigurations" : [{
+            "TopicARN" : { "Ref" : "Concrete5NotificationTopic" },
+            "NotificationTypes" : [ "autoscaling:EC2_INSTANCE_LAUNCH",
+                                    "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+                                    "autoscaling:EC2_INSTANCE_TERMINATE",
+                                    "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"]
+          }]
+        }
+      },
+
+      "LaunchConfig" : {
+        "Type" : "AWS::AutoScaling::LaunchConfiguration",
+        "Properties" : {
+          "KeyName" : { "Ref" : "KeyName" },
+          "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+                                            { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
+          "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+          "InstanceType" : { "Ref" : "InstanceType" },
+          "SpotPrice" :  "0.017"
+        }
+      },
+
+      "ElasticLoadBalancer" : {
+        "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+        "Properties" : {
+          "AvailabilityZones" : { "Fn::GetAZs" : "" },
+          "CrossZone" : "true",
+          "Listeners" : [ {
+            "LoadBalancerPort" : "80",
+            "InstancePort" : "80",
+            "Protocol" : "HTTP"
+          } ],
+          "HealthCheck" : {
+            "Target" : "HTTP:80/",
+            "HealthyThreshold" : "3",
+            "UnhealthyThreshold" : "5",
+            "Interval" : "30",
+            "Timeout" : "5"
+          }
+        }
+      },
+
+      "InstanceSecurityGroup" : {
+        "Type" : "AWS::EC2::SecurityGroup",
+        "Properties" : {
+          "GroupDescription" : "Enable HTTP access from the load balancer only",
+          "SecurityGroupIngress" : [ {
+            "IpProtocol" : "tcp",
+            "FromPort" : "80",
+            "ToPort" : "80",
+            "SourceSecurityGroupOwnerId" : {"Fn::GetAtt" : ["ElasticLoadBalancer", "SourceSecurityGroup.OwnerAlias"]},
+            "SourceSecurityGroupName" : {"Fn::GetAtt" : ["ElasticLoadBalancer", "SourceSecurityGroup.GroupName"]}
+          } ]
+        }
+      }
+
+    },
+
+
+    "Outputs" : {
+      "URL" : {
+        "Description" : "The URL of the website",
+        "Value" :  { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]}
+      }
+    },
+
+
+    "Mappings" : {
+
+      "AWSInstanceType2Arch" : {
+        "t2.micro"    : { "Arch" : "HVM64"  },
+        "t2.small"    : { "Arch" : "HVM64"  },
+        "t2.large"    : { "Arch" : "HVM64"  },
+        "m3.medium"   : { "Arch" : "HVM64"  },
+        "m3.large"    : { "Arch" : "HVM64"  },
+        "m3.xlarge"   : { "Arch" : "HVM64"  },
+        "m3.2xlarge"  : { "Arch" : "HVM64"  },
+        "c1.medium"   : { "Arch" : "PV64"   },
+        "c1.xlarge"   : { "Arch" : "PV64"   },
+        "c3.large"    : { "Arch" : "HVM64"  },
+        "c3.xlarge"   : { "Arch" : "HVM64"  },
+        "c3.2xlarge"  : { "Arch" : "HVM64"  }
+      },
+
+      "AWSRegionArch2AMI" : {
+        "eu-west-1"      : { "PV64" : "ami-aa8f28dd", "HVM64" : "ami-748e2903", "HVMG2" : "ami-00913777"  },
+        "eu-central-1"   : { "PV64" : "ami-a03503bd", "HVM64" : "ami-b43503a9", "HVMG2" : "ami-b03503ad"  }
+      }
+
+    }
+
+
+}
