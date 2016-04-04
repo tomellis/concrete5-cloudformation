@@ -1,0 +1,199 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "The Bitnami concrete5 5.7.5.6: concrete5 CMS is a content management system that allows you to deploy web applications, websites, stores and forums and easily manage their content and site structure. concrete5 powers hundreds of thousands of sites around the world. For more information, please visit:  https://bitnami.com.",
+
+  "Parameters" : {
+    "BitnamiInstanceType" : {
+      "Default" : "t2.micro",
+      "Type" : "String",
+      "Description" : "The type of EC2 instances"
+    },
+    "KeyName": {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access",
+      "Type": "String",
+      "Default" : "default"
+    },
+    "BitnamiUser" : {
+      "Default" : "user",
+      "Type" : "String",
+      "Description" : "The Bitnami concrete5 user login"
+    },
+    "BitnamiPassword" : {
+      "Default" : "bitnami",
+      "Type" : "String",
+      "Description" : "The Bitnami concrete5 user password (minimum 7 characters, default value: bitnami )",
+      "NoEcho" : "TRUE"
+    },
+    "BitnamiEmail" : {
+      "Default" : "user@example.com",
+      "Description" : "The Bitnami concrete5 user email",
+      "Type" : "String"
+    },
+    "BitnamiUserName" : {
+      "Default" : "Bitnami User",
+      "Description" : "The Bitnami concrete5 user full name",
+      "Type" : "String"
+    }
+  },
+  "Resources" : {
+    "BitnamiSecurityGroup" : {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Allow HTTP/HTTPS/SSH to Bitnami machine.",
+        "SecurityGroupIngress" :
+          [
+            {
+              "IpProtocol": "tcp",
+              "FromPort": "80",
+              "ToPort": "80",
+              "CidrIp": "0.0.0.0/0"
+            },
+            {
+              "IpProtocol": "tcp",
+              "FromPort": "443",
+              "ToPort": "443",
+              "CidrIp": "0.0.0.0/0"
+            },
+            {
+              "IpProtocol": "tcp",
+              "FromPort": "22",
+              "ToPort": "22",
+              "CidrIp": "0.0.0.0/0"
+            }
+          ]
+      }
+    },
+    "BitnamiServer" : {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "ImageId" : { "Fn::FindInMap": [ "AWSRegionArch2AMI", { "Ref": "AWS::Region" }, { "Fn::FindInMap": [ "AWSInstanceType2Arch", {"Ref": "BitnamiInstanceType" },"Arch" ] } ]},
+        "KeyName" : {"Ref": "KeyName"},
+        "SecurityGroups" : [ { "Ref" : "BitnamiSecurityGroup" } ],
+        "UserData" : { "Fn::Base64" : { "Fn::Join" : [ "", [ 
+          "#!/bin/sh\n",
+          "cat > /tmp/stack_properties.ini <<EOF\n",
+          "base_user=",{ "Ref" : "BitnamiUser" }, "\n",
+          "base_user_name=",{ "Ref" : "BitnamiUserName" }, "\n",
+          "base_mail=",{ "Ref" : "BitnamiEmail" }, "\n",
+          "base_password=",{ "Ref" : "BitnamiPassword" }, "\n",
+          
+          "EOF\n",
+          "\n",
+          "\n",
+          "/opt/bitnami/mysql/bin/mysqladmin -p'bitnami' -u root password '", { "Ref" : "BitnamiPassword" }, "'\n",
+          "\n",
+          "curl --capath /etc/ssl/certs/ --retry 3 -sS  -o /tmp/stack.bin -L --max-redirs 3 https://downloads.bitnami.com/files/stacks/concrete5/5.7.5.6-0/bitnami-concrete5-5.7.5.6-0-module-linux-x64-installer.run\n",
+          "chmod +x /tmp/stack.bin\n",
+          "/tmp/stack.bin --mode unattended --prefix /opt/bitnami --optionfile /tmp/stack_properties.ini\n",
+          "\n",
+          "/opt/bitnami/scripts/init/update_ip\n",
+          "rm -f /tmp/stack.bin \n",
+          "rm -f /tmp/stack_properties.ini\n",
+          "\n"
+         ] ] } },
+        "InstanceType" : { "Ref" : "BitnamiInstanceType" },
+        "Tags" : [ {
+          "Key" : "Name",
+          "Value" : "The Bitnami concrete5 5.7.5.6"
+        } ]
+      }
+    },
+    "BitnamiIP" : {
+      "Type" : "AWS::EC2::EIP",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "BitnamiServer" }
+      }
+    }
+
+  },
+  "Mappings": {
+    "AWSInstanceType2Arch" : {
+  "t2.nano": {
+    "Arch": "64"
+  },
+  "t2.micro": {
+    "Arch": "64"
+  },
+  "t2.small": {
+    "Arch": "64"
+  },
+  "t2.medium": {
+    "Arch": "64"
+  },
+  "t2.large": {
+    "Arch": "64"
+  },
+  "m3.medium": {
+    "Arch": "64"
+  },
+  "m3.large": {
+    "Arch": "64"
+  },
+  "m3.xlarge": {
+    "Arch": "64"
+  },
+  "m3.2xlarge": {
+    "Arch": "64"
+  },
+  "m4.large": {
+    "Arch": "64"
+  },
+  "m4.xlarge": {
+    "Arch": "64"
+  },
+  "m4.2xlarge": {
+    "Arch": "64"
+  },
+  "m4.4xlarge": {
+    "Arch": "64"
+  },
+  "m4.10xlarge": {
+    "Arch": "64"
+  },
+  "c3.large": {
+    "Arch": "64"
+  },
+  "c3.xlarge": {
+    "Arch": "64"
+  },
+  "c3.2xlarge": {
+    "Arch": "64"
+  },
+  "c3.4xlarge": {
+    "Arch": "64"
+  },
+  "c3.8xlarge": {
+    "Arch": "64"
+  },
+  "c4.large": {
+    "Arch": "64"
+  },
+  "c4.xlarge": {
+    "Arch": "64"
+  },
+  "c4.2xlarge": {
+    "Arch": "64"
+  },
+  "c4.4xlarge": {
+    "Arch": "64"
+  },
+  "c4.8xlarge": {
+    "Arch": "64"
+  },
+  "hs1.8xlarge": {
+    "Arch": "64"
+  },
+  "hi1.4xlarge": {
+    "Arch": "64"
+  }
+},
+    "AWSRegionArch2AMI" : {"ap-northeast-1":{"64":"ami-61a6aa0f"},"ap-northeast-2":{"64":"ami-73539d1d"},"ap-southeast-1":{"64":"ami-13f33b70"},"ap-southeast-2":{"64":"ami-16280975"},"eu-central-1":{"64":"ami-47bd5928"},"eu-west-1":{"64":"ami-13b30a60"},"sa-east-1":{"64":"ami-0c3fbd60"},"us-east-1":{"64":"ami-3ec7ff54"},"us-west-1":{"64":"ami-c42b58a4"},"us-west-2":{"64":"ami-d87b97b8"}} 
+  },
+  "Outputs" : {
+    "URL" : {
+      "Description" : "URL of the Bitnami concrete5 5.7.5.6 server:",
+      "Value" : { "Fn::Join" : [ "", [ "http://", { "Ref" : "BitnamiIP" } ] ] }
+    }
+  }
+}
