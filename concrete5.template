@@ -24,6 +24,15 @@
         "Type": "String",
         "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
         "ConstraintDescription": "must be a valid email address."
+      },
+
+      "SSHLocation" : {
+        "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+        "Type": "String",
+        "MinLength": "9",
+        "MaxLength": "18",
+        "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+        "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
       }
 
     },
@@ -64,7 +73,14 @@
                                             { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] },
           "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
           "InstanceType" : { "Ref" : "InstanceType" },
-          "SpotPrice" :  "0.017"
+          "SpotPrice" :  "0.017",
+          "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+            "#!/bin/bash\n",
+            "yum -y update\n",
+            "yum install -y httpd24 php56 git\n",
+            "yum install -y php56-common.x86_64 php56-gd php56-mysqlnd php56-mbstring php56-mcrypt php56-pdo php56-xml\n",
+            "yum install -y mysql56-server\n"
+          ]]}}
         }
       },
 
@@ -91,13 +107,19 @@
       "InstanceSecurityGroup" : {
         "Type" : "AWS::EC2::SecurityGroup",
         "Properties" : {
-          "GroupDescription" : "Enable HTTP access from the load balancer only",
+          "GroupDescription" : "Enable SSH to instance from set IP and HTTP access from the load balancer only",
           "SecurityGroupIngress" : [ {
             "IpProtocol" : "tcp",
             "FromPort" : "80",
             "ToPort" : "80",
             "SourceSecurityGroupOwnerId" : {"Fn::GetAtt" : ["ElasticLoadBalancer", "SourceSecurityGroup.OwnerAlias"]},
             "SourceSecurityGroupName" : {"Fn::GetAtt" : ["ElasticLoadBalancer", "SourceSecurityGroup.GroupName"]}
+          },
+          {
+          "IpProtocol" : "tcp",
+          "FromPort" : "22",
+          "ToPort" : "22",
+          "CidrIp" : { "Ref" : "SSHLocation"}
           } ]
         }
       }
